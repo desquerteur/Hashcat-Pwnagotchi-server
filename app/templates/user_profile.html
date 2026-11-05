@@ -47,6 +47,7 @@ danger
                 <span class="glyphicon glyphicon-download-alt"></span> Download All Found Passwords (.txt)
             </a>
             <form method="POST" action="{{ url_for('requeue_all') }}" style="display: inline-block; margin-left: 6px;" onsubmit="return confirm('Retry all failed completed tasks?');">
+                <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
                 <button type="submit" class="btn btn-warning" {% if retryable_count == 0 %}disabled{% endif %}>
                     <span class="glyphicon glyphicon-repeat"></span> Retry All
                     {% if retryable_count %}({{ retryable_count }}){% endif %}
@@ -89,8 +90,14 @@ danger
                         <span>#{{ task.queue_position }}</span>
                         {% if can_reorder_queue %}
                             <div class="btn-group btn-group-xs" style="margin-left: 4px;">
-                                <a href="{{ url_for('move_queue_task', task_id=task.id, direction='up') }}" class="btn btn-default" title="Move up">Up</a>
-                                <a href="{{ url_for('move_queue_task', task_id=task.id, direction='down') }}" class="btn btn-default" title="Move down">Down</a>
+                                <form method="POST" action="{{ url_for('move_queue_task', task_id=task.id, direction='up') }}" style="display:inline;">
+                                    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                                    <button type="submit" class="btn btn-default" title="Move up">Up</button>
+                                </form>
+                                <form method="POST" action="{{ url_for('move_queue_task', task_id=task.id, direction='down') }}" style="display:inline;">
+                                    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                                    <button type="submit" class="btn btn-default" title="Move down">Down</button>
+                                </form>
                             </div>
                         {% endif %}
                     {% else %}
@@ -111,7 +118,10 @@ danger
                  {% if not task.completed %}
                     <button class="btn btn-danger btn-xs" onclick="cancelTask({{ task.id }})">Cancel</button>
                  {% elif not task.found_key %}
-                    <a href="{{ url_for('requeue', task_id=task.id) }}" class="btn btn-warning btn-xs">Re-Queue</a>
+                    <form method="POST" action="{{ url_for('requeue', task_id=task.id) }}" style="display:inline;">
+                        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                        <button type="submit" class="btn btn-warning btn-xs">Re-Queue</button>
+                    </form>
                  {% endif %}
                 </td>
             </tr>
@@ -126,7 +136,7 @@ danger
 {{super()}}
 <script>
     function cancelTask(task_id) {
-        $.get('/cancel/' + task_id).done(function(message) {
+        $.post('/cancel/' + task_id).done(function(message) {
             alert(message);
        })
     }

@@ -10,6 +10,12 @@
 {% endblock %}
 
 
+{% block metas %}
+{{super()}}
+<meta name="csrf-token" content="{{ csrf_token() }}">
+{% endblock %}
+
+
 {% block styles %}
 {{super()}}
 <link rel="stylesheet" href="{{url_for('static', filename='style.css')}}">
@@ -49,7 +55,7 @@
 				  <ul class="nav navbar-nav navbar-right">
                     <li><a href="{{ url_for('admin_users') }}">User Management (Admin)</a></li>
                     <li><a href="{{ url_for('admin_settings') }}">Settings (Admin)</a></li>
-                    <li><a href="{{ url_for('admin_rainbow') }}">Rainbow (Admin)</a></li>
+                    <li><a href="{{ url_for('admin_rainbow') }}">PMK Cache (Admin)</a></li>
                     <li><a href="{{ url_for('register') }}">Register (Admin)</a></li>
 				  </ul>
 			 </div>
