@@ -22,6 +22,34 @@ HASHCAT_WARNINGS = (
     "nvmlDeviceGetUtilizationRates",
 )
 
+# Substrings that mark a genuinely fatal hashcat startup/runtime error.
+# Used to decide whether a short run that exited 0/1 actually failed to start,
+# instead of treating every non-nvml stderr line (e.g. harmless OpenCL/device
+# hints) as an error.
+HASHCAT_FATAL_ERROR_PATTERNS = (
+    "no devices found",
+    "no device found",
+    "no opencl",
+    "no cuda",
+    "no hip",
+    "no metal",
+    "no backend",
+    "cuinit()",
+    "clgetplatformids",
+    "self-test failed",
+    "no hashes loaded",
+    "token length exception",
+    "separator unmatched",
+    "not enough",
+    "out of memory",
+    "memory allocation",
+    "segmentation fault",
+    "initialization failed",
+    "failed to initialize",
+    "could not",
+    "cannot be used",
+)
+
 CONTROL_LOOP_INTERVAL = 1.0
 TRANSIENT_STATUS_PREFIXES = (
     "Paused for CPU cooldown",
@@ -111,6 +139,15 @@ def split_warnings_errors(stderr: str):
     warn = '\n'.join(warn)
     err = '\n'.join(err)
     return warn, err
+
+
+def is_fatal_hashcat_error(stderr_text: str) -> bool:
+    """
+    True only when stderr contains a known fatal error pattern. Benign OpenCL /
+    device informational lines must NOT be treated as failures.
+    """
+    lowered = stderr_text.lower()
+    return any(pattern in lowered for pattern in HASHCAT_FATAL_ERROR_PATTERNS)
 
 
 def format_hashcat_exit_error(returncode, stderr_summary=""):
@@ -457,7 +494,12 @@ def _run_hashcat_process_once(hashcat_cmd_list, lock: ProgressLock, timeout_minu
         warn, err = split_warnings_errors(stderr)
         if err.strip():
             logger.error(f"Hashcat error detected: {err.strip()}")
-            if time.time() - start < 2 and process.returncode in (0, 1, None):
+            # A short run that exited with a success code (0 = cracked, 1 =
+            # exhausted) only counts as a failed start when stderr actually
+            # looks fatal. Harmless OpenCL/device hints must not abort it.
+            if (time.time() - start < 2
+                    and process.returncode in (0, 1, None)
+                    and is_fatal_hashcat_error(err)):
                 raise RuntimeError(f"Hashcat failed to start: {err.splitlines()[0]}")
 
     if process.returncode != 0:
