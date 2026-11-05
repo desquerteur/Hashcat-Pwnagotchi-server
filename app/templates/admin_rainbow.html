@@ -2,13 +2,13 @@
 
 {% block page_content %}
 <div class="container">
-    <h1>Rainbow Wordlist</h1>
-    <p class="text-muted">This page shows the password source list used to build ESSID-specific WPA PMK rainbow caches.</p>
+    <h1>PMK Cache (Already-Cracked Passwords)</h1>
+    <p class="text-muted">This is not a rainbow table. It lists the passwords already cracked on this server, which are reused to build ESSID-specific WPA PMK caches. It only helps once some passwords have been cracked &mdash; otherwise there are no candidates.</p>
 
     <div class="row">
         <div class="col-md-8">
             <div class="panel panel-info">
-                <div class="panel-heading">Current Rainbow Source</div>
+                <div class="panel-heading">Current PMK Cache Source</div>
                 <div class="panel-body">
                     {% if rainbow_wordlist %}
                         <p><strong>File:</strong> {{ rainbow_wordlist }}</p>
@@ -22,12 +22,12 @@
                         </p>
                         <p>
                             <a href="{{ url_for('download_rainbow_wordlist') }}" class="btn btn-info">
-                                Download Rainbow Source Wordlist
+                                Download PMK Cache Source Wordlist
                             </a>
                         </p>
                     {% else %}
                         <div class="alert alert-warning">
-                            No rainbow source is available yet. Crack a few captures first, then return here to build ESSID-specific PMK caches.
+                            No cracked passwords are available yet. Crack a few captures first, then return here to build ESSID-specific PMK caches.
                         </div>
                     {% endif %}
                 </div>
@@ -57,7 +57,7 @@
                         <li>Passwords are collected from cracked tasks and cached key files.</li>
                         <li>Duplicates are removed while keeping the newest discoveries first.</li>
                         <li>For each target ESSID, the server precomputes WPA PMKs from this list.</li>
-                        <li>Rainbow mode checks those PMKs with hashcat mode 22001.</li>
+                        <li>PMK Cache mode checks those PMKs with hashcat mode 22001.</li>
                     </ul>
                 </div>
             </div>
