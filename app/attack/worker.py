@@ -171,15 +171,29 @@ class CapAttack(BaseAttack):
             with self.lock:
                 self.lock.set_status("Downloading the wordlist")
             while not self.wordlist.exists():
-                time.sleep(5)
                 self.cancel_if_needed()
+                # Don't wait forever for a download that may never arrive; honour
+                # the job deadline like every other stage (raises TimeoutError).
+                self._remaining_timeout_minutes()
+                time.sleep(5)
         with self.lock:
             self.lock.set_status("Running the main wordlist")
         hashcat_cmd = self.new_cmd()
         resolved_wordlist = materialize_wordlist_source(self.wordlist)
+        # materialize_wordlist_source only returns a different path when it had to
+        # generate a temporary file from a script; clean that up, never the user's
+        # chosen wordlist.
+        generated_wordlist = resolved_wordlist if resolved_wordlist != self.wordlist else None
         hashcat_cmd.add_wordlists(resolved_wordlist)
         hashcat_cmd.add_rule(self.rule)
-        self.runner(hashcat_cmd)
+        try:
+            self.runner(hashcat_cmd)
+        finally:
+            if generated_wordlist is not None:
+                try:
+                    Path(generated_wordlist).unlink()
+                except OSError as error:
+                    logger.warning(f"Could not remove generated wordlist {generated_wordlist}: {error}")
 
     def run_rainbow_attack(self):
         """
@@ -195,6 +209,11 @@ class CapAttack(BaseAttack):
             return
 
         if rainbow_wordlist is None or not rainbow_wordlist.exists():
+            logger.warning(
+                "Rainbow attack has no source passwords (PMK reuse cache is empty); "
+                "nothing to try. This is not a crack - it just means no previously "
+                "found passwords were available to reuse."
+            )
             return
 
         try:
@@ -510,10 +529,12 @@ class HashcatWorker:
     def submit_recovery(self, task: UploadedTask, state: dict):
         lock = ProgressLock(task_id=task.id)
         future = self.executor.submit(_recover_async, worker=self, lock=lock, state=state)
-        future.add_done_callback(self.callback_attack)
+        # Register the lock BEFORE the done-callback so a fast-finishing future can
+        # never fire callback_attack before its lock exists (which would leak devices).
+        self.locks[id(future)] = lock
         with lock:
             lock.future = future
-        self.locks[id(future)] = lock
+        future.add_done_callback(self.callback_attack)
         task.status = TaskInfoStatus.SCHEDULED
         task.completed = False
 
@@ -555,10 +576,12 @@ class HashcatWorker:
             raw_hashcat_args=raw_hashcat_args,
             requested_device_ids=requested_device_ids,
         )
-        future.add_done_callback(self.callback_attack)
+        # Register the lock BEFORE the done-callback so a fast-finishing future can
+        # never fire callback_attack before its lock exists (which would leak devices).
+        self.locks[id(future)] = lock
         with lock:
             lock.future = future
-        self.locks[id(future)] = lock
+        future.add_done_callback(self.callback_attack)
 
     def benchmark(self):
         """
@@ -588,6 +611,10 @@ class HashcatWorker:
 
         try:
             subprocess_call(["pkill", "hashcat"])
+        except (FileNotFoundError, OSError) as error:
+            # pkill is Linux-only; on other platforms (e.g. Windows) it is absent.
+            # The futures are cancelled below regardless, so just log and continue.
+            logger.warning(f"Could not run pkill to stop hashcat processes: {error}")
         finally:
             self.executor.shutdown(wait=False, cancel_futures=True)
             self.executor = concurrent.futures.ThreadPoolExecutor(max_workers=self.MAX_WORKERS)

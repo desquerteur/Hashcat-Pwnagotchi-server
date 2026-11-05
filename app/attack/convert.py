@@ -1,10 +1,16 @@
 from pathlib import Path
 import re
+import subprocess
 
 from app.logger import logger
 from app.domain import InvalidFileError
-from app.utils import subprocess_call, check_file_22000, calculate_md5
+from app.utils import check_file_22000, calculate_md5
 from app.utils.file_io import parse_wpa_hash_line
+
+# Guard against external hcx tools hanging forever on a corrupt capture and
+# blocking the calling (possibly request) thread. Conversions of normal captures
+# finish in seconds; this is a generous upper bound.
+HCX_TOOL_TIMEOUT_SECONDS = 300
 
 
 def _safe_group_filename(bssid: str, essid_hex: str, index: int, suffix: str) -> str:
@@ -32,13 +38,43 @@ def _split_by_essid_fallback(file_22000: Path, to_folder: Path, output_suffix: s
 
 
 def run_hcx_command(args, working_directory: Path | None = None):
+    # Run the hcx tool directly (not via subprocess_call) so we can enforce a
+    # timeout: a corrupt capture can otherwise make hcxpcapngtool/hcxhashtool
+    # hang indefinitely and block the caller. Returns (stdout, stderr) just like
+    # subprocess_call so callers stay unchanged.
+    args = list(map(str, args))
+    process_cwd = str(working_directory) if working_directory is not None else None
+    logger.debug(">>> {}".format(' '.join(args)))
     try:
-        return subprocess_call(args, cwd=str(working_directory) if working_directory is not None else None)
+        completed = subprocess.run(
+            args,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+            cwd=process_cwd,
+            text=True,
+            encoding="utf-8",
+            errors="replace",
+            timeout=HCX_TOOL_TIMEOUT_SECONDS,
+        )
     except FileNotFoundError as e:
         executable = args[0] if args else "unknown"
         raise FileNotFoundError(
             f"Missing dependency: '{executable}'. Please install 'hcxtools' and 'hashcat'."
         ) from e
+    except subprocess.TimeoutExpired as e:
+        executable = args[0] if args else "unknown"
+        logger.error(
+            f"'{executable}' timed out after {HCX_TOOL_TIMEOUT_SECONDS} s; aborting conversion "
+            f"(capture is likely corrupt)."
+        )
+        raise InvalidFileError(
+            f"Conversion timed out after {HCX_TOOL_TIMEOUT_SECONDS} seconds; "
+            f"the capture file may be corrupt."
+        ) from e
+    if completed.stderr or completed.returncode != 0:
+        logger.debug(completed.stdout)
+        logger.error(completed.stderr)
+    return completed.stdout, completed.stderr
 
 
 def convert_to_22000(capture_path):
@@ -61,6 +97,11 @@ def convert_to_22000(capture_path):
         # Already in a supported text format; keep it as-is so the hash mode suffix
         # stays aligned with the later hashcat invocation.
         return Path(capture_path)
+    # NOTE: the hcxmactool flags below (--hccapxin / --pmkidin / --pmkideapolout)
+    # were not changed because they could not be verified against an installed
+    # hcxtools build in this environment. Confirm them against the target server's
+    # `hcxmactool --help` (newer hcxtools reorganised the *.hccapx/pmkid flags) and
+    # update here if they are reported as deprecated/removed.
     if capture_path.suffix == ".hccapx":
         convert_and_verify(['hcxmactool', f'--hccapxin={capture_path}', f'--pmkideapolout={file_22000}'])
     elif capture_path.suffix == ".pmkid":

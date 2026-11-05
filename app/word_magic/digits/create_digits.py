@@ -92,7 +92,10 @@ def create_digits_mask(masks: Iterable, alphabet=string.digits, alphabet_size_ma
             for digits_perm in itertools.permutations(alphabet, alphabet_mask_size):
                 sample = convert(pattern, alphabet_mask, code=digits_perm)
                 digits.append(sample)
-    assert all_unique(digits)
+    if not all_unique(digits):
+        # Don't crash the worker thread with an AssertionError; just de-duplicate.
+        logger.warning("create_digits_mask produced duplicate entries; de-duplicating")
+        digits = sorted(set(digits))
     return digits
 
 
@@ -104,7 +107,10 @@ def create_digits_cycle(password_length: int) -> list:
         if password_length > 1:
             descending = ascending[::-1]
             digits.append(descending)
-    assert all_unique(digits)
+    if not all_unique(digits):
+        # Don't crash the worker thread with an AssertionError; just de-duplicate.
+        logger.warning("create_digits_cycle produced duplicate entries; de-duplicating")
+        digits = sorted(set(digits))
     return digits
 
 
