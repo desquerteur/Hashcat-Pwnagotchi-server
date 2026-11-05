@@ -29,6 +29,7 @@
         <p class="text-muted small">These lists are only downloaded when you need them for a task.</p>
         {% for wordlist in missing_default_wordlists %}
         <form method="POST" action="{{ url_for('install_default_wordlist', wordlist_name=wordlist.path.name) }}" style="display: inline-block; margin-right: 10px; margin-bottom: 10px;">
+            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
             <button type="submit" class="btn btn-info btn-sm">Install {{ wordlist.name }}</button>
         </form>
         {% endfor %}
@@ -74,8 +75,8 @@
         <button type="submit" class="btn btn-default btn-lg">Submit</button>
     </form>
 
-    <p class="text-muted small" style="margin-top: 20px;">Rainbow mode builds an ESSID-specific WPA PMK cache from previously cracked keys and checks it with hashcat mode 22001.</p>
-    <p class="text-muted small" style="margin-top: 20px;">Normal mode checks the ESSID-specific rainbow PMK cache first. If you select a wordlist, only that selected wordlist runs after rainbow; otherwise the task continues into staged WPA brute force: numbers, letters, letters+numbers, then printable+special by length checkpoints.</p>
+    <p class="text-muted small" style="margin-top: 20px;">PMK Cache mode reuses passwords already cracked on this server to build an ESSID-specific WPA PMK cache and checks it with hashcat mode 22001. It finds nothing if no passwords have been cracked yet.</p>
+    <p class="text-muted small" style="margin-top: 20px;">Normal mode checks the ESSID-specific PMK cache first. If you select a wordlist, only that selected wordlist runs after the PMK cache; otherwise the task continues into staged WPA brute force: numbers, letters, letters+numbers, then printable+special by length checkpoints.</p>
 </div>
 {% endblock %}
 

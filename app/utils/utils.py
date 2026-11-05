@@ -2,8 +2,8 @@ import datetime
 import os
 import re
 import subprocess
+import time
 from shutil import which
-from functools import lru_cache
 from typing import List
 from pathlib import Path
 from urllib.parse import urlparse, urljoin
@@ -303,9 +303,25 @@ def get_live_usage():
         
     return stats
 
-@lru_cache(maxsize=1)
+# Detecting devices shells out to hashcat/nvidia-smi, so we cache the result.
+# A short TTL (instead of a permanent lru_cache) keeps the list fresh after a
+# GPU driver install or hardware change without a manual restart.
+_HASHCAT_DEVICES_TTL_SECONDS = 30
+_hashcat_devices_cache = {"devices": None, "expires_at": 0.0}
+
+
+def clear_hashcat_devices_cache():
+    """ Forget the cached device list so the next call re-detects devices. """
+    _hashcat_devices_cache["devices"] = None
+    _hashcat_devices_cache["expires_at"] = 0.0
+
+
 def get_hashcat_devices():
     """ Returns a list of detected hashcat devices (GPUs/CPUs). """
+    now = time.monotonic()
+    if _hashcat_devices_cache["devices"] is not None and now < _hashcat_devices_cache["expires_at"]:
+        return _hashcat_devices_cache["devices"]
+
     devices = []
     
     # 1. Primary Method: Hashcat identification
@@ -403,4 +419,12 @@ def get_hashcat_devices():
         )
         cpu_devices = [preferred_cpu]
 
-    return gpu_devices + cpu_devices
+    result = gpu_devices + cpu_devices
+    _hashcat_devices_cache["devices"] = result
+    _hashcat_devices_cache["expires_at"] = time.monotonic() + _HASHCAT_DEVICES_TTL_SECONDS
+    return result
+
+
+# Preserve the lru_cache-style ``.cache_clear()`` API so existing callers and
+# tests can force a fresh re-detection (e.g. after a GPU driver install).
+get_hashcat_devices.cache_clear = clear_hashcat_devices_cache

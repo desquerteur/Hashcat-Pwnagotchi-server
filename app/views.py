@@ -16,7 +16,7 @@ from flask_login import login_user, logout_user, login_required, current_user
 from werkzeug.datastructures import CombinedMultiDict
 from werkzeug.utils import secure_filename
 
-from app import app, db, limiter
+from app import app, db, limiter, csrf
 from app.config import APP_UPDATE_PROGRESS_FILE, NVIDIA_INSTALL_PROGRESS_FILE
 from app.attack.convert import split_by_essid, convert_to_22000
 from app.attack.recovery import read_recovery_state
@@ -634,6 +634,7 @@ def get_pwnagotchi_status_snapshot():
 
 
 @app.route('/pwnagotchi')
+@login_required
 def pwnagotchi():
     statuses = get_pwnagotchi_status_snapshot()
     latest_status = statuses[0] if statuses else None
@@ -711,6 +712,7 @@ def install_default_wordlist(wordlist_name):
 
 
 @app.route('/api/admin/install_progress')
+@limiter.exempt
 @login_required
 @roles_required(RoleEnum.ADMIN)
 def api_admin_install_progress():
@@ -728,6 +730,8 @@ def update_wait():
     )
 
 @app.route('/api/upload', methods=['POST'])
+@csrf.exempt
+@limiter.exempt
 def api_upload():
     auth = request.authorization
     if not auth or not auth.username or not auth.password:
@@ -776,6 +780,8 @@ def api_upload():
 
 
 @app.route('/api/pwnagotchi/heartbeat', methods=['POST'])
+@csrf.exempt
+@limiter.exempt
 def api_pwnagotchi_heartbeat():
     auth = request.authorization
     if not auth or not auth.username or not auth.password:
@@ -803,6 +809,7 @@ def api_pwnagotchi_heartbeat():
 
 
 @app.route('/estimate_runtime', methods=['POST'])
+@limiter.exempt
 @login_required
 def estimate_runtime():
     wordlist = request.form.get('wordlist')
@@ -831,7 +838,7 @@ def user_profile():
     return render_template('user_profile.html', title='Home', tasks=tasks,
                            can_reorder_queue=user_has_roles(current_user, RoleEnum.ADMIN),
                            retryable_count=retryable_count,
-                           benchmark=read_last_benchmark(), devices=hashcat_devices_info(), progress=progress())
+                           benchmark=read_last_benchmark(), devices=hashcat_devices_info())
 
 
 @app.route('/progress')
@@ -930,11 +937,11 @@ def download_all_results():
 @login_required
 def download_rainbow_wordlist():
     if not user_has_roles(current_user, RoleEnum.ADMIN):
-        return flask.abort(HTTPStatus.FORBIDDEN, description="You do not have permission to download the rainbow wordlist.")
+        return flask.abort(HTTPStatus.FORBIDDEN, description="You do not have permission to download the PMK cache wordlist.")
 
     rainbow_wordlist = build_rainbow_wordlist()
     if rainbow_wordlist is None or not rainbow_wordlist.exists():
-        flask.flash("No rainbow wordlist is available yet.", category="info")
+        flask.flash("No PMK cache wordlist is available yet. Crack some passwords first.", category="info")
         return redirect(url_for('admin_rainbow'))
 
     return flask.send_file(
@@ -965,7 +972,7 @@ def admin_rainbow():
 
     return render_template(
         'admin_rainbow.html',
-        title='Rainbow Wordlist',
+        title='PMK Cache',
         rainbow_wordlist=rainbow_wordlist,
         rainbow_entries=rainbow_entries[:50],
         rainbow_size=rainbow_size,
@@ -1034,7 +1041,7 @@ def register():
     return render_template('register.html', title='Admin register', form=form)
 
 
-@app.route("/benchmark")
+@app.route("/benchmark", methods=["POST"])
 @login_required
 @roles_required(RoleEnum.ADMIN)
 def benchmark():
@@ -1042,7 +1049,7 @@ def benchmark():
     return jsonify("Started benchmark.")
 
 
-@app.route("/cancel/<int:task_id>")
+@app.route("/cancel/<int:task_id>", methods=["POST"])
 @login_required
 def cancel(task_id):
     task = db.session.get(UploadedTask, task_id)
@@ -1056,7 +1063,7 @@ def cancel(task_id):
         return jsonify("Cancelling...")
 
 
-@app.route("/queue/<int:task_id>/<string:direction>")
+@app.route("/queue/<int:task_id>/<string:direction>", methods=["POST"])
 @login_required
 @roles_required(RoleEnum.ADMIN)
 def move_queue_task(task_id, direction):
@@ -1093,7 +1100,7 @@ def move_queue_task(task_id, direction):
     return redirect(url_for('user_profile'))
 
 
-@app.route("/requeue/<int:task_id>")
+@app.route("/requeue/<int:task_id>", methods=["POST"])
 @login_required
 def requeue(task_id):
     task = db.session.get(UploadedTask, task_id)
@@ -1186,7 +1193,7 @@ def requeue_completed_task(task: UploadedTask):
     return new_task
 
 
-@app.route('/terminate')
+@app.route('/terminate', methods=["POST"])
 @login_required
 @roles_required(RoleEnum.ADMIN)
 def terminate():
@@ -1347,8 +1354,15 @@ def admin_settings():
     if form.validate_on_submit():
         new_intensities = {}
         for device in devices:
-            val = request.form.get(f"device_{device['id']}", 100)
-            new_intensities[str(device['id'])] = int(val)
+            raw_val = request.form.get(f"device_{device['id']}", 100)
+            try:
+                intensity = int(raw_val)
+            except (TypeError, ValueError):
+                intensity = 100
+            # Clamp to a valid percentage so a blank or tampered field cannot
+            # crash the settings save or store a nonsensical intensity.
+            intensity = max(1, min(100, intensity))
+            new_intensities[str(device['id'])] = intensity
         
         write_settings(
             device_intensities=new_intensities,
@@ -1510,6 +1524,7 @@ def admin_settings():
 
 
 @app.route('/tailscale_status')
+@limiter.exempt
 @login_required
 @roles_required(RoleEnum.ADMIN)
 def tailscale_status():
@@ -1517,6 +1532,7 @@ def tailscale_status():
 
 
 @app.route('/cloudflare_status')
+@limiter.exempt
 @login_required
 @roles_required(RoleEnum.ADMIN)
 def cloudflare_status():
@@ -1524,6 +1540,7 @@ def cloudflare_status():
 
 
 @app.route('/api/stats')
+@limiter.exempt
 @login_required
 def api_stats():
     from app.uploader import UploadedTask

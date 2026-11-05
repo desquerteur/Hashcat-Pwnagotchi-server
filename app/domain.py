@@ -31,7 +31,7 @@ class Rule(Enum):
         choices = [(NONE_STR, "(None)")]
         for path in sorted(RULES_DIR.iterdir()):
             # Essid rule is used in attack_essid only
-            if path.name != Rule.ESSID:
+            if path.name != Rule.ESSID.value:
                 choices.append((path.name, path.name))
         return tuple(choices)
 
@@ -133,10 +133,13 @@ class Workload(Enum):
 
     @staticmethod
     def to_form():
-        # (id_value, description) pairs
+        # (id_value, description) pairs.
+        # Workload.Rainbow is NOT a rainbow table; it is a PMK cache built from
+        # passwords already cracked on this server. Keep the honest label here;
+        # the enum member name/value must stay unchanged (used by app.attack).
         return (
             (Workload.Normal.value, "Normal"),
-            (Workload.Rainbow.value, "Rainbow"),
+            (Workload.Rainbow.value, "PMK Cache (already-cracked passwords only)"),
         )
 
     @staticmethod
