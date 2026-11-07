@@ -68,10 +68,9 @@ def proceed_login(user: User, remember=False):
 @app.route('/index')
 def index():
     from app.uploader import UploadedTask
-    from app.login import User
     from app.utils.settings import read_settings
     from app.utils.utils import get_hashcat_devices
-    
+
     settings = read_settings()
     devices = get_hashcat_devices()
     device_intensities = settings.get("device_intensities", {})
@@ -81,7 +80,6 @@ def index():
         'total_cracked': UploadedTask.query.filter(UploadedTask.found_key.is_not(None)).count(),
         'total_failed': UploadedTask.query.filter(UploadedTask.completed == True, UploadedTask.found_key.is_(None)).count(),
         'total_active': UploadedTask.query.filter(active_task_filter()).count(),
-        'total_users': User.query.count(),
         'cpu_limit': settings.get('cpu_percent', 100)
     }
     
@@ -1544,7 +1542,6 @@ def cloudflare_status():
 @login_required
 def api_stats():
     from app.uploader import UploadedTask
-    from app.login import User
     from app.utils.settings import read_settings
     from app.utils.utils import get_hashcat_devices, get_live_usage
     
@@ -1558,7 +1555,6 @@ def api_stats():
         'total_cracked': UploadedTask.query.filter(UploadedTask.found_key.is_not(None)).count(),
         'total_failed': UploadedTask.query.filter(UploadedTask.completed == True, UploadedTask.found_key.is_(None)).count(),
         'total_active': UploadedTask.query.filter(active_task_filter()).count(),
-        'total_users': User.query.count(),
         'cpu_limit': settings.get('cpu_percent', 100),
         'devices': devices,
         'device_intensities': device_intensities,

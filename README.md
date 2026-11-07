@@ -400,8 +400,8 @@ Uploads are converted to `.22000` when the required Linux conversion tools are a
 
 ## Attack Modes
 
-- `Rainbow` - builds an ESSID-specific WPA PMK cache from previously cracked keys and checks it with Hashcat mode 22001
-- `Normal` - extended attack chain that continues until the task is completed, cracked, or cancelled
+- `PMK Cache` - reuses passwords already cracked on this server to build an ESSID-specific WPA PMK cache and checks it with Hashcat mode 22001. It is **not** a rainbow table and finds nothing until some passwords have already been cracked. (The CLI/API value for this mode is still `rainbow`.)
+- `Normal` - extended attack chain that continues until the task is completed, cracked, or cancelled. It checks the PMK cache first, then any selected wordlist, then staged WPA brute force (numbers, letters, letters+numbers, printable+special by length).
 
 ## Wordlists
 
@@ -409,6 +409,35 @@ Uploads are converted to `.22000` when the required Linux conversion tools are a
 - User wordlists live under `~/.hashcat/wpa-server/wordlists`
 - User generator scripts are supported
 - Supported generator extensions are `.sh`, `.bash`, and `.py`
+
+## Changelog
+
+### Unreleased - security & reliability hardening
+
+Web / server layer:
+
+- **Rate limiting fixed.** The global limiter (`200/day`, `50/hour`) was applied to the dashboard polling and machine endpoints, so the dashboard stopped refreshing after a few minutes and Pwnagotchi uploads were throttled. Polling/API/status routes (`api_stats`, `api_upload`, `api_pwnagotchi/heartbeat`, `estimate_runtime`, `api_admin_install_progress`, `tailscale_status`, `cloudflare_status`) are now exempt, and `ProxyFix` is enabled so the real client IP (`X-Forwarded-For`) is used behind nginx/Cloudflare instead of the proxy IP shared by everyone.
+- **Authentication.** `/pwnagotchi` now requires login; it previously exposed usernames, hostnames, upload filenames and the internal Tailscale IP to anonymous visitors.
+- **CSRF protection.** Global `flask_wtf.CSRFProtect` is enabled. The external machine endpoints (`api_upload`, `api_pwnagotchi/heartbeat`) are exempt so Pwnagotchi uploads keep working. State-changing `GET` routes (`cancel`, `queue` reorder, `requeue`, `terminate`, `benchmark`) are now `POST` with CSRF tokens.
+- **Smaller fixes.** Device detection uses a short-TTL cache (refreshes after a GPU driver install) instead of a permanent cache; the settings page parses and clamps device intensities instead of crashing on an empty/invalid field; the profile page no longer calls the `progress()` view directly (which cleared live locks as a side effect); `Rule.to_form()` now compares against `Rule.ESSID.value` so `essid.rule` is hidden again; the unused `total_users` statistic was removed.
+- **Honest naming.** The "Rainbow" work mode is relabeled **PMK Cache** everywhere in the UI, with copy clarifying it only helps once passwords have been cracked. It is a PMK cache built from already-cracked passwords, not a rainbow table. Enum members, routes and the CLI value (`rainbow`) are unchanged for backward compatibility.
+
+Crack / attack pipeline:
+
+- Short successful runs are no longer aborted as "failed to start" because of harmless OpenCL/device hints on stderr; only known fatal error patterns count.
+- Waiting for a wordlist download now honours the job timeout instead of waiting forever and blocking a worker slot.
+- External hcx conversion tools run with a timeout, so a corrupt capture cannot hang the request thread.
+- A fast-finishing task can no longer leak claimed devices (the device lock is registered before the completion callback).
+- `terminate()` tolerates a missing `pkill` (non-Linux) instead of raising.
+- An empty PMK-cache ("rainbow") run now logs a clear warning instead of looking like a silent success.
+- Digit-mask generation de-duplicates instead of asserting, so a duplicate can no longer crash a worker thread.
+
+### Known items still to verify
+
+- `hcxmactool` flags for the `.hccapx`/`.pmkid` conversion paths were left unchanged and should be checked against the installed `hcxtools` version.
+- Result (`.key`) download may 404 for captures split across multiple ESSIDs; the key-file naming for split captures needs confirmation before changing.
+- `estimate_runtime` passes the submitted wordlist path through without validation (login-only, low impact).
+- The Tailscale installer unit test assumes Tailscale is **not** already installed on the test machine, so it fails on hosts that have it.
 
 ## Development
 
