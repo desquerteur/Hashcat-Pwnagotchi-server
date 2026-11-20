@@ -288,7 +288,7 @@ class LaunchReadyFlowTests(unittest.TestCase):
         self.login_admin()
 
         with mock.patch.object(views.hashcat_worker, "benchmark", return_value=None, create=True) as benchmark:
-            response = self.client.get("/benchmark")
+            response = self.client.post("/benchmark")
 
         self.assertEqual(response.status_code, 200, response.get_data(as_text=True))
         self.assertEqual(response.get_json(), "Started benchmark.")
@@ -308,7 +308,7 @@ class LaunchReadyFlowTests(unittest.TestCase):
             session["_fresh"] = True
 
         with mock.patch.object(views.hashcat_worker, "benchmark", return_value=None, create=True) as benchmark:
-            response = self.client.get("/benchmark")
+            response = self.client.post("/benchmark")
 
         self.assertEqual(response.status_code, 403)
         benchmark.assert_not_called()
@@ -413,7 +413,7 @@ class LaunchReadyFlowTests(unittest.TestCase):
         self.fake_worker.submitted.clear()
         self.login_admin()
         with mock.patch("app.views.resolve_task_attack_file", return_value=sample_capture):
-            requeue_response = self.client.get(f"/requeue/{task_id}", follow_redirects=True)
+            requeue_response = self.client.post(f"/requeue/{task_id}", follow_redirects=True)
 
         self.assertEqual(requeue_response.status_code, 200, requeue_response.get_data(as_text=True))
         self.assertEqual(len(self.fake_worker.submitted), 1)
@@ -910,7 +910,7 @@ class LaunchReadyFlowTests(unittest.TestCase):
 
         self.login_admin()
         with mock.patch.object(views.hashcat_worker, "cancel", return_value=True, create=True) as cancel_task:
-            response = self.client.get(f"/cancel/{task_id}")
+            response = self.client.post(f"/cancel/{task_id}")
 
         self.assertEqual(response.status_code, 200, response.get_data(as_text=True))
         self.assertEqual(response.get_json(), "Cancelled")
@@ -943,7 +943,7 @@ class LaunchReadyFlowTests(unittest.TestCase):
             session["_fresh"] = True
 
         with mock.patch.object(views.hashcat_worker, "cancel", return_value=True, create=True) as cancel_task:
-            response = self.client.get(f"/cancel/{task_id}")
+            response = self.client.post(f"/cancel/{task_id}")
 
         self.assertEqual(response.status_code, 403)
         cancel_task.assert_not_called()
@@ -1051,7 +1051,7 @@ class LaunchReadyFlowTests(unittest.TestCase):
 
         self.login_admin()
         with mock.patch("app.views.resolve_task_attack_file", return_value=sample_capture):
-            response = self.client.get(f"/requeue/{task_id}", follow_redirects=True)
+            response = self.client.post(f"/requeue/{task_id}", follow_redirects=True)
 
         self.assertEqual(response.status_code, 200, response.get_data(as_text=True))
         self.assertIn("was re-queued", response.get_data(as_text=True))
@@ -1084,7 +1084,7 @@ class LaunchReadyFlowTests(unittest.TestCase):
         self.login_admin()
         with mock.patch("app.views.resolve_task_attack_file", return_value=sample_capture), \
                 mock.patch("app.views.read_hashcat_brain_password", return_value="fresh-secret"):
-            response = self.client.get(f"/requeue/{task_id}", follow_redirects=True)
+            response = self.client.post(f"/requeue/{task_id}", follow_redirects=True)
 
         self.assertEqual(response.status_code, 200, response.get_data(as_text=True))
         self.assertEqual(len(self.fake_worker.submitted), 1)

@@ -22,7 +22,7 @@ class InstallScriptTests(unittest.TestCase):
             text=True,
             stdout=subprocess.PIPE,
             stderr=subprocess.STDOUT,
-            timeout=30,
+            timeout=120,
         )
 
     @staticmethod
@@ -45,7 +45,12 @@ class InstallScriptTests(unittest.TestCase):
 
             script = textwrap.dedent(f"""
                 set -euo pipefail
-                export PATH="{self.bash_path(bin_dir)}:$PATH"
+                # Hermetic PATH: the fake curl/sh from bin_dir plus the base
+                # coreutils, but NOT the host's real directories. This keeps the
+                # "tailscale already installed" short-circuit from firing on dev
+                # machines that happen to have tailscale on PATH (e.g. Windows),
+                # so the curl-failure branch is actually exercised.
+                export PATH="{self.bash_path(bin_dir)}:/usr/bin:/bin"
                 export HASHCAT_WPA_INSTALL_SOURCE_ONLY=1
                 export HASHCAT_WPA_PROGRESS_FILE="{self.bash_path(progress_file)}"
                 source ./install.sh

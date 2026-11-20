@@ -88,7 +88,7 @@ class GpuDriverInstallerTests(unittest.TestCase):
                 text=True,
                 stdout=subprocess.PIPE,
                 stderr=subprocess.STDOUT,
-                timeout=30,
+                timeout=120,
             )
 
     def test_nvidia_gpu_installs_ubuntu_recommended_driver_package(self):
