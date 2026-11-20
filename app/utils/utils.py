@@ -8,7 +8,8 @@ from typing import List
 from pathlib import Path
 from urllib.parse import urlparse, urljoin
 
-from flask import request, Markup
+from flask import request
+from markupsafe import Markup
 
 from app.logger import logger
 
